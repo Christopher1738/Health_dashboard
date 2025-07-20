@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Monitor Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4285f4;
+            --alert-color: #ff4444;
+            --warning-color: #ffbb33;
+            --success-color: #00C851;
+            --card-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --border-radius: 8px;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+            background-color: #f9f9f9;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            margin: 0;
+        }
+        
+        .last-updated {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            padding: 20px;
+        }
+        
+        .card h2 {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-size: 1.2em;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .metric-value {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .status-normal {
+            color: var(--success-color);
+        }
+        
+        .status-warning {
+            color: var(--warning-color);
+        }
+        
+        .status-alert {
+            color: var(--alert-color);
+        }
+        
+        #plot {
+            width: 100%;
+            height: 400px;
+            margin: 20px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: var(--card-shadow);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background-color: #f5f5f5;
+            font-weight: 600;
+        }
+        
+        tr.alert-row {
+            background-color: rgba(255, 68, 68, 0.05);
+        }
+        
+        .no-data {
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            th, td {
+                padding: 8px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🩺 Health Monitoring Dashboard</h1>
+            <div class="last-updated">
+                {% if data %}
+                    Last updated: {{ data[-1].timestamp | default('Unknown', true) }}
+                {% endif %}
+            </div>
+        </header>
+        
+        <div class="dashboard-grid">
+            <!-- Heart Rate Card -->
+            <div class="card">
+                <h2>❤️ Heart Rate</h2>
+                {% if data %}
+                    {% set latest = data[-1] %}
+                    <div class="metric">
+                        <span>Current:</span>
+                        <span class="metric-value 
+                            {% if latest.heart_rate > 100 %}status-alert
+                            {% elif latest.heart_rate > 90 %}status-warning
+                            {% else %}status-normal
+                            {% endif %}">
+                            {{ latest.heart_rate | default('N/A', true) }} bpm
+                        </span>
+                    </div>
+                    <div class="metric">
+                        <span>Today's Avg:</span>
+                        <span class="metric-value">
+                            {{ (data | map(attribute='heart_rate') | sum / data | length) | round(1) }} bpm
+                        </span>
+                    </div>
+                {% else %}
+                    <p class="no-data">No heart rate data available</p>
+                {% endif %}
+            </div>
+            
+            <!-- Blood Oxygen Card -->
+            <div class="card">
+                <h2>💨 Blood Oxygen</h2>
+                {% if data %}
+                    {% set latest = data[-1] %}
+                    <div class="metric">
+                        <span>Current:</span>
+                        <span class="metric-value 
+                            {% if latest.blood_oxygen < 90 %}status-alert
+                            {% elif latest.blood_oxygen < 95 %}status-warning
+                            {% else %}status-normal
+                            {% endif %}">
+                            {{ latest.blood_oxygen | default('N/A', true) }}%
+                        </span>
+                    </div>
+                    <div class="metric">
+                        <span>Today's Avg:</span>
+                        <span class="metric-value">
+                            {{ (data | map(attribute='blood_oxygen') | sum / data | length) | round(1) }}%
+                        </span>
+                    </div>
+                {% else %}
+                    <p class="no-data">No blood oxygen data available</p>
+                {% endif %}
+            </div>
+            
+            <!-- Status Card -->
+            <div class="card">
+                <h2>📊 Overall Status</h2>
+                {% if data %}
+                    {% set latest = data[-1] %}
+                    {% set alert_count = data | selectattr('is_anomaly', 'equalto', -1) | list | length %}
+                    
+                    <div class="metric">
+                        <span>Alerts Today:</span>
+                        <span class="metric-value {% if alert_count > 0 %}status-alert{% endif %}">
+                            {{ alert_count }}
+                        </span>
+                    </div>
+                    <div class="metric">
+                        <span>Data Points:</span>
+                        <span class="metric-value">{{ data | length }}</span>
+                    </div>
+                {% else %}
+                    <p class="no-data">No status data available</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Visualization -->
+        <div class="card">
+            <h2>📈 Heart Rate History</h2>
+            <div id="plot"></div>
+            <div id="plot-error" class="no-data" style="display:none;">
+                Could not load health data visualization
+            </div>
+        </div>
+        
+        <!-- Alerts Table -->
+        <div class="card">
+            <h2>⚠️ Health Alerts</h2>
+            {% if data and data|selectattr('is_anomaly', 'equalto', -1)|list %}
+                <table aria-label="Health alerts">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Metric</th>
+                            <th>Value</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in data if row.is_anomaly == -1 %}
+                        <tr class="alert-row">
+                            <td>{{ row.timestamp | default('Unknown', true) }}</td>
+                            <td>
+                                {% if row.heart_rate > 100 or row.heart_rate < 60 %}
+                                    Heart Rate
+                                {% elif row.blood_oxygen < 90 %}
+                                    Blood Oxygen
+                                {% else %}
+                                    Unknown
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row.heart_rate > 100 or row.heart_rate < 60 %}
+                                    {{ row.heart_rate }} bpm
+                                {% elif row.blood_oxygen < 90 %}
+                                    {{ row.blood_oxygen }}%
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="status-alert">⚠️ Critical</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="no-data">No health alerts detected today</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Safe Plotly rendering with proper error handling
+        (function renderPlot() {
+            try {
+                {% if data %}
+                    const healthData = JSON.parse('{{ data | tojson }}');
+                    const timestamps = healthData.map(item => item.timestamp);
+                    const heartRates = healthData.map(item => item.heart_rate);
+                    
+                    if (timestamps.length && heartRates.length) {
+                        Plotly.newPlot('plot', [{
+                            x: timestamps,
+                            y: heartRates,
+                            mode: 'lines+markers',
+                            name: 'Heart Rate',
+                            line: {color: '#4285f4'},
+                            marker: {
+                                color: heartRates.map(hr => 
+                                    hr > 100 ? '#ff4444' : 
+                                    hr > 90 ? '#ffbb33' : '#00C851'
+                                ),
+                                size: 6
+                            }
+                        }], {
+                            title: '24-Hour Heart Rate Trend',
+                            xaxis: {title: 'Time'},
+                            yaxis: {title: 'BPM', range: [50, 150]},
+                            margin: {t: 40, r: 30, b: 40, l: 50},
+                            showlegend: false
+                        });
+                    } else {
+                        document.getElementById('plot-error').style.display = 'block';
+                    }
+                {% else %}
+                    document.getElementById('plot-error').style.display = 'block';
+                {% endif %}
+            } catch (e) {
+                console.error("Visualization error:", e);
+                document.getElementById('plot-error').style.display = 'block';
+            }
+        })();
+    </script>
+</body>
+</html>
+
+<!-- Add this below your metrics -->
+{% if data and data|selectattr('is_anomaly', 'equalto', -1)|list %}
+<div class="alert-banner">
+    ⚠️ Abnormal readings detected! Check the alerts table below.
+</div>
+
+<style>
+.alert-banner {
+    background: #ff4444;
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    text-align: center;
+    font-weight: bold;
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+</style>
+{% endif %}
