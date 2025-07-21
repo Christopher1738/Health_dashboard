@@ -1,22 +1,26 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory
 import pandas as pd
 import os
 
 app = Flask(__name__)
 
-# Your routes (keep your existing routes here)
+# Verify template folder path
+template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+app.template_folder = template_dir
+
 @app.route('/')
 def dashboard():
     try:
-        df = pd.read_csv("anomalies_detected.csv")
+        # Verify CSV exists
+        csv_path = os.path.join(os.path.dirname(__file__), 'anomalies_detected.csv')
+        if not os.path.exists(csv_path):
+            return "Error: Data file not found", 404
+            
+        df = pd.read_csv(csv_path)
         return render_template("dashboard.html", data=df.to_dict("records"))
+        
     except Exception as e:
         return f"Error loading data: {str(e)}", 500
 
-# Add this at the bottom
 if __name__ == '__main__':
-    # Development server (runs only when executing app.py directly)
     app.run(host='0.0.0.0', port=5000, debug=True)
-else:
-    # Production mode (for Gunicorn)
-    pass
