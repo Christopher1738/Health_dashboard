@@ -1,32 +1,38 @@
 from flask import Flask, render_template
-import pandas as pd
 import os
 from datetime import datetime, timedelta
+import random
+import json
 
 app = Flask(__name__)
 
-def get_health_data():
-    # Auto-generate data if file doesn't exist
-    if not os.path.exists('health_data.csv'):
-        dates = [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(30)]
-        data = {
-            'date': dates[::-1],
-            'heart_rate': [72 + i%20 + (-1)**i*5 for i in range(30)],
-            'blood_oxygen': [96 + i%3 - i//10 for i in range(30)],
-            'sleep_hours': [6.5 + i%3 - 0.5*(i%7) for i in range(30)],
-            'steps': [5000 + i*300 - (i%4)*500 for i in range(30)],
-            'is_anomaly': [0]*25 + [1]*5  # 5 random anomalies
-        }
-        pd.DataFrame(data).to_csv('health_data.csv', index=False)
-    
-    return pd.read_csv('health_data.csv').to_dict('records')
+def generate_health_data():
+    # Generate 30 days of synthetic data
+    data = []
+    for i in range(30):
+        date = (datetime.now() - timedelta(days=(29-i))).strftime('%Y-%m-%d')
+        heart_rate = 72 + random.randint(-5, 15)
+        blood_oxygen = 95 + random.randint(-3, 3)
+        sleep_hours = round(6.5 + random.uniform(-1, 2), 1)
+        steps = 5000 + random.randint(-1000, 2000)
+        is_anomaly = 1 if (heart_rate > 100 or blood_oxygen < 90) else 0
+        
+        data.append({
+            "date": date,
+            "heart_rate": heart_rate,
+            "blood_oxygen": blood_oxygen,
+            "sleep_hours": sleep_hours,
+            "steps": steps,
+            "is_anomaly": is_anomaly
+        })
+    return data
 
 @app.route('/')
 def dashboard():
     try:
-        return render_template("dashboard.html", data=get_health_data())
+        return render_template("dashboard.html", data=generate_health_data())
     except Exception as e:
-        return f"<h1>Dashboard Loading</h1><p>Initializing... Refresh in 30 seconds. Error: {str(e)}</p>", 202
+        return f"<h1>Loading Dashboard</h1><p>Refresh in 30 seconds. Error: {str(e)}</p>", 202
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
